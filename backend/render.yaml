@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: crypto-api
+    env: python
+    region: oregon
+    buildCommand: ""
+    startCommand: "python app.py"
+    envVars:
+      - key: PORT
+        value: 5000
+    plan: free
+    rootDir: backend
