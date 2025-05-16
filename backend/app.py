@@ -6,7 +6,7 @@ from alerts import check_ema_alerts, check_price_change_alerts, check_open_inter
 from database import save_data, get_latest_data
 from open_interest import get_open_interest_data
 import asyncio
-from backend.db import get_price_change
+from db import get_price_change
 
 
 app = Flask(__name__)
