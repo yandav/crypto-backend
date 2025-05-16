@@ -9,12 +9,12 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import axios from 'axios'
+import API from '../api'
 
 const emaAlerts = ref([])
 
 const load = async () => {
-  const res = await axios.get('http://localhost:5000/api/data')
+  const res = await API.get('/api/data')
   emaAlerts.value = res.data.alerts.ema_alerts
 }
 

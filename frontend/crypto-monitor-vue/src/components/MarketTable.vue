@@ -46,7 +46,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import axios from 'axios'
+import API from '../api'
 
 const data = ref([])
 const page = ref(1)
@@ -57,7 +57,7 @@ const sortOrder = ref(1) // 1: 升序, -1: 降序
 
 // 加载数据
 const loadData = async () => {
-  const res = await axios.get('http://localhost:5000/api/data')
+  const res = await API.get('/api/data')
   data.value = res.data.data
 }
 

@@ -35,7 +35,7 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
-import axios from 'axios'
+import API from '../api'
 import { ElMessage } from 'element-plus'
 
 const data = ref([])
@@ -48,7 +48,7 @@ const pageSize = ref(20)
 // 请求数据
 const fetchData = async () => {
   try {
-    const res = await axios.get('http://127.0.0.1:5000/api/open_interest')
+    const res = await API.get('/api/open_interest')
     data.value = res.data.data
   } catch (e) {
     ElMessage.error('获取失败')

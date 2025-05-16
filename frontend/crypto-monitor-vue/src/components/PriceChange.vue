@@ -51,7 +51,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import axios from 'axios'
+import API from '../api'
 import { ElMessage } from 'element-plus'
 
 const data = ref([])
@@ -61,7 +61,7 @@ const pageSize = 20
 
 const fetchData = async () => {
   try {
-    const res = await axios.get('http://127.0.0.1:5000/api/price_change')
+    const res = await API.get('/api/price_change')
     data.value = res.data.data
   } catch (e) {
     ElMessage.error('获取失败')
