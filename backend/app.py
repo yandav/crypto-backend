@@ -7,6 +7,7 @@ from database import save_data, get_latest_data
 from open_interest import get_open_interest_data
 import asyncio
 from db import get_price_change
+import os
 
 
 app = Flask(__name__)
@@ -84,5 +85,10 @@ def get_price_change_api():
 def index():
     return "Hello from Render!"
 
-if __name__ == "__main__":
-    app.run(debug=True)
+
+#if __name__ == "__main__":
+#    app.run(debug=True)
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))  # 读取 PORT 环境变量，Render 会提供
+    app.run(host='0.0.0.0', port=port, debug=True)
