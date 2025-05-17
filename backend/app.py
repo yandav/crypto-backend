@@ -28,9 +28,9 @@ def update_data():
     except Exception as e:
         print("❌ 定时任务失败:", e)
 
-# ✅ 创建调度器（每 1 分钟运行一次）
+# ✅ 创建调度器（每 1 分钟运行一次，限制最大并发为 1）
 scheduler = BackgroundScheduler()
-scheduler.add_job(update_data, 'interval', minutes=1)
+scheduler.add_job(update_data, 'interval', minutes=1, max_instances=1)
 scheduler.start()
 
 

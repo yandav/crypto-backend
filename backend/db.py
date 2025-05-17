@@ -2,7 +2,10 @@ from sqlalchemy import create_engine, Column, String, Float, DateTime, Integer, 
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, scoped_session
 from datetime import datetime, timedelta
+from threading import Lock
 
+
+db_lock = Lock()
 Base = declarative_base()
 
 # ✅ 创建线程安全引擎 + 启用 WAL 模式
@@ -34,22 +37,24 @@ def create_tables():
 
 # --- 持仓量保存 ---
 def save_open_interest_data(data):
-    session = Session()
-    now = datetime.utcnow()
-    try:
-        for item in data:
-            record = OpenInterest(
-                symbol=item['symbol'],
-                timestamp=now,
-                open_interest=item['openInterest']
-            )
-            session.add(record)
-        session.commit()
-    except Exception as e:
-        session.rollback()
-        print(f"❌ 保存 open interest 失败: {e}")
-    finally:
-        session.close()
+    with db_lock:
+        session = Session()
+        now = datetime.utcnow()
+        try:
+            for item in data:
+                record = OpenInterest(
+                    symbol=item['symbol'],
+                    timestamp=now,
+                    open_interest=item['openInterest']
+                )
+                session.add(record)
+            session.commit()
+        except Exception as e:
+            session.rollback()
+            print(f"❌ 保存 open interest 失败: {e}")
+        finally:
+            session.close()
+
 
 # --- 获取过去持仓量 ---
 def get_previous_oi(symbol, minutes_ago):
@@ -70,21 +75,23 @@ def get_previous_oi(symbol, minutes_ago):
 
 # --- 保存价格 ---
 def save_price_history(data):
-    session = Session()
-    now = datetime.utcnow()
-    try:
-        for item in data:
-            session.add(PriceHistory(
-                symbol=item['symbol'],
-                timestamp=now,
-                price=item['price']
-            ))
-        session.commit()
-    except Exception as e:
-        session.rollback()
-        print(f"❌ 保存价格失败: {e}")
-    finally:
-        session.close()
+    with db_lock:
+        session = Session()
+        now = datetime.utcnow()
+        try:
+            for item in data:
+                session.add(PriceHistory(
+                    symbol=item['symbol'],
+                    timestamp=now,
+                    price=item['price']
+                ))
+            session.commit()
+        except Exception as e:
+            session.rollback()
+            print(f"❌ 保存价格失败: {e}")
+        finally:
+            session.close()
+
 
 # --- 获取历史价格 ---
 def get_price_change(symbol, minutes_ago):
