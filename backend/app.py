@@ -6,12 +6,33 @@ from alerts import check_ema_alerts, check_price_change_alerts, check_open_inter
 from database import save_data, get_latest_data
 from open_interest import get_open_interest_data
 import asyncio
-from db import get_price_change
+from db import get_price_change, save_price_history, save_open_interest_data
 import os
-
+# ✅ 添加 APScheduler
+from apscheduler.schedulers.background import BackgroundScheduler
 
 app = Flask(__name__)
 CORS(app)
+
+# ✅ 定时抓取并保存价格和持仓量
+def update_data():
+    try:
+        print("⏰ 正在抓取并保存价格和持仓量数据...")
+        price_data = fetch_all_data()
+        save_price_history(price_data)
+
+        oi_data = asyncio.run(get_open_interest_data())
+        save_open_interest_data(oi_data)
+
+        print("✅ 数据已保存")
+    except Exception as e:
+        print("❌ 定时任务失败:", e)
+
+# ✅ 创建调度器（每 1 分钟运行一次）
+scheduler = BackgroundScheduler()
+scheduler.add_job(update_data, 'interval', minutes=1)
+scheduler.start()
+
 
 @app.route("/api/data", methods=["GET"])
 def get_data():
@@ -90,5 +111,8 @@ def index():
 #    app.run(debug=True)
 
 if __name__ == '__main__':
+    # ✅ 启动前先抓一次数据
+    update_data()
+    # ✅ 正式启动服务
     port = int(os.environ.get('PORT', 5000))  # 读取 PORT 环境变量，Render 会提供
     app.run(host='0.0.0.0', port=port, debug=True)
