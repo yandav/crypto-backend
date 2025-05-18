@@ -45,15 +45,17 @@ scheduler = BackgroundScheduler()
 scheduler.add_job(
     update_price_data,
     'interval',
-    minutes=3,
+    minutes=5,
     id='update_price_data',
+    max_instances=3,       # ✅ 允许最多3个同时运行
     coalesce=True          # ✅ 如果有漏掉的只补一次，避免积压
 )
 scheduler.add_job(
     update_open_interest_data,
     'interval',
-    minutes=3,
+    minutes=5,
     id='update_open_interest_data',
+    max_instances=3,
     coalesce=True
 )
 scheduler.start()
