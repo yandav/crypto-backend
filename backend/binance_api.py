@@ -1,8 +1,8 @@
 # binance_api.py
 import httpx
 import asyncio
-from db import save_open_interest_data, get_previous_oi, save_price_history
-from datetime import datetime, timedelta
+from datetime import datetime
+from db import get_previous_oi
 
 BASE_URL = "https://fapi.binance.com"
 
@@ -22,18 +22,15 @@ def fetch_all_data():
         symbol = item["symbol"]
         if not symbol.endswith("USDT"):
             continue
-
         result.append({
             "symbol": symbol,
             "price": float(item["lastPrice"]),
             "change": float(item["priceChangePercent"]),
             "volume": float(item["quoteVolume"]),
-            "fundingRate": funding_dict.get(symbol, None)  # 有就显示，没有就显示 None
+            "fundingRate": funding_dict.get(symbol, None)
         })
 
-    save_price_history(result)  # ✅ 加入这句，保存价格历史
     return result
-
 
 def get_valid_symbols():
     """只获取 USDT 永续合约"""
@@ -48,11 +45,9 @@ async def fetch_open_interest(session, symbol):
         data = resp.json()
         if "openInterest" not in data:
             return None
-
-        current_oi = float(data["openInterest"])
         return {
             "symbol": symbol,
-            "current_oi": current_oi
+            "current_oi": float(data["openInterest"])
         }
     except Exception as e:
         print(f"❌ 获取 {symbol} 持仓量失败: {e}")
@@ -64,19 +59,14 @@ def calc_change(old, current):
     return round(((current - old) / old) * 100, 2)
 
 async def get_open_interest_data():
-    # 获取币种
-    symbols = get_valid_symbols()  # 建议前 20 个主流币
-
-    # 获取 fundingRate 数据
+    symbols = get_valid_symbols()
     premium_data = httpx.get(f"{BASE_URL}/fapi/v1/premiumIndex").json()
     funding_dict = {d["symbol"]: float(d.get("lastFundingRate") or 0.0) for d in premium_data}
 
-    # 开始异步抓取
     async with httpx.AsyncClient() as client:
         tasks = [fetch_open_interest(client, symbol) for symbol in symbols]
         raw_results = await asyncio.gather(*tasks)
 
-    # 整理数据
     result = []
     now = datetime.utcnow()
     for item in raw_results:
@@ -84,20 +74,15 @@ async def get_open_interest_data():
             continue
         symbol = item["symbol"]
         current_oi = item["current_oi"]
-        change_5m = calc_change(get_previous_oi(symbol, 5), current_oi)
-        change_15m = calc_change(get_previous_oi(symbol, 15), current_oi)
-        change_1h = calc_change(get_previous_oi(symbol, 60), current_oi)
-
         result.append({
             "symbol": symbol,
             "fundingRate": funding_dict.get(symbol, 0.0),
             "openInterest": current_oi,
             "openInterestChange": {
-                "5m": change_5m,
-                "15m": change_15m,
-                "1h": change_1h
+                "5m": calc_change(get_previous_oi(symbol, 5), current_oi),
+                "15m": calc_change(get_previous_oi(symbol, 15), current_oi),
+                "1h": calc_change(get_previous_oi(symbol, 60), current_oi),
             }
         })
 
-    save_open_interest_data(result)
     return result
