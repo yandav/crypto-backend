@@ -17,7 +17,6 @@ app = Flask(__name__)
 CORS(app)
 
 # ✅ 拆分成两个定时任务函数
-
 def update_price_data():
     try:
         print("📈 正在抓取价格数据...")
@@ -41,14 +40,27 @@ def update_open_interest_data():
     except Exception as e:
         print("❌ 持仓量数据保存失败:", e)
 
-# ✅ 创建调度器（分别每 1 分钟执行一次）
+# ✅ 创建调度器（每 1 分钟执行一次，并允许多个实例并发执行）
 scheduler = BackgroundScheduler()
-scheduler.add_job(update_price_data, 'interval', minutes=1, max_instances=1)
-scheduler.add_job(update_open_interest_data, 'interval', minutes=1, max_instances=1)
+scheduler.add_job(
+    update_price_data,
+    'interval',
+    minutes=1,
+    id='update_price_data',
+    max_instances=3,       # ✅ 允许最多3个同时运行
+    coalesce=True          # ✅ 如果有漏掉的只补一次，避免积压
+)
+scheduler.add_job(
+    update_open_interest_data,
+    'interval',
+    minutes=1,
+    id='update_open_interest_data',
+    max_instances=3,
+    coalesce=True
+)
 scheduler.start()
 
 # --- 接口定义 ---
-
 @app.route("/api/data", methods=["GET"])
 def get_data():
     try:
@@ -128,6 +140,7 @@ if __name__ == '__main__':
     # ✅ 启动前手动跑一次价格和持仓量更新
     update_price_data()
     update_open_interest_data()
+
     # ✅ 启动服务
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=True)
