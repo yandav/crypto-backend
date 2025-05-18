@@ -1,20 +1,19 @@
-# binance_api.py
 import httpx
 import asyncio
 from datetime import datetime
-from db import get_previous_oi
+from db import get_previous_oi, save_open_interest_data  # ✅ 加上保存函数
+import time
 
 BASE_URL = "https://fapi.binance.com"
 
 def fetch_all_data():
-    # 获取所有资金费率（premiumIndex 有所有 PERPETUAL 的 fundingRate）
+    """获取价格和 fundingRate 数据"""
     premium_data = httpx.get(f"{BASE_URL}/fapi/v1/premiumIndex").json()
     funding_dict = {
         item["symbol"]: float(item.get("lastFundingRate") or 0.0)
         for item in premium_data
     }
 
-    # 获取所有 24h ticker 数据
     ticker_data = httpx.get(f"{BASE_URL}/fapi/v1/ticker/24hr").json()
 
     result = []
@@ -59,6 +58,9 @@ def calc_change(old, current):
     return round(((current - old) / old) * 100, 2)
 
 async def get_open_interest_data():
+    print("📊 开始抓取持仓量数据...")
+    start = time.time()
+
     symbols = get_valid_symbols()
     premium_data = httpx.get(f"{BASE_URL}/fapi/v1/premiumIndex").json()
     funding_dict = {d["symbol"]: float(d.get("lastFundingRate") or 0.0) for d in premium_data}
@@ -68,7 +70,6 @@ async def get_open_interest_data():
         raw_results = await asyncio.gather(*tasks)
 
     result = []
-    now = datetime.utcnow()
     for item in raw_results:
         if not item:
             continue
@@ -84,5 +85,9 @@ async def get_open_interest_data():
                 "1h": calc_change(get_previous_oi(symbol, 60), current_oi),
             }
         })
+
+    # ✅ 保存到数据库
+    save_open_interest_data(result)
+    print(f"✅ 持仓量数据抓取完成，用时 {time.time() - start:.2f}s，共 {len(result)} 个币种")
 
     return result

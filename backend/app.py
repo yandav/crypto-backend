@@ -1,42 +1,53 @@
-# app.py
 from flask import Flask, jsonify
 from flask_cors import CORS
-from binance_api import fetch_all_data, get_open_interest_data
+from binance_api import fetch_all_data
 from indicators import append_ema
 from alerts import check_ema_alerts, check_price_change_alerts, check_open_interest_alerts
 from database import save_data, get_latest_data
-from db import save_price_history, save_open_interest_data, get_price_change
-from apscheduler.schedulers.background import BackgroundScheduler
+from open_interest import get_open_interest_data
+from db import get_price_change, save_price_history, save_open_interest_data
 import asyncio
 import os
+import time
+
+# ✅ APScheduler 导入
+from apscheduler.schedulers.background import BackgroundScheduler
 
 app = Flask(__name__)
 CORS(app)
 
-# ✅ 异步执行数据更新
-def update_data():
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+# ✅ 拆分成两个定时任务函数
 
-    async def run():
-        try:
-            print("⏰ 正在抓取并保存价格和持仓量数据...")
-            price_data = fetch_all_data()
-            save_price_history(price_data)
+def update_price_data():
+    try:
+        print("📈 正在抓取价格数据...")
+        start = time.time()
+        price_data = fetch_all_data()
+        save_price_history(price_data)
+        print(f"✅ 价格数据已保存，用时 {time.time() - start:.2f}s")
+    except Exception as e:
+        print("❌ 价格数据保存失败:", e)
 
-            oi_data = await get_open_interest_data()
-            save_open_interest_data(oi_data)
-            print("✅ 数据已保存")
-        except Exception as e:
-            print("❌ 定时任务失败:", e)
+def update_open_interest_data():
+    try:
+        print("📊 正在抓取持仓量数据...")
+        start = time.time()
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        data = loop.run_until_complete(get_open_interest_data())
+        save_open_interest_data(data)
+        loop.close()
+        print(f"✅ 持仓量数据已保存，用时 {time.time() - start:.2f}s")
+    except Exception as e:
+        print("❌ 持仓量数据保存失败:", e)
 
-    loop.run_until_complete(run())
-    loop.close()
-
-# ✅ 创建调度器（防止多任务冲突，设置 max_instances）
+# ✅ 创建调度器（分别每 1 分钟执行一次）
 scheduler = BackgroundScheduler()
-scheduler.add_job(update_data, 'interval', minutes=1, max_instances=1)
+scheduler.add_job(update_price_data, 'interval', minutes=1, max_instances=1)
+scheduler.add_job(update_open_interest_data, 'interval', minutes=1, max_instances=1)
 scheduler.start()
+
+# --- 接口定义 ---
 
 @app.route("/api/data", methods=["GET"])
 def get_data():
@@ -49,6 +60,7 @@ def get_data():
             "ema_alerts": check_ema_alerts(data),
             "change_alerts": check_price_change_alerts(data)
         }
+
         return jsonify({"message": "成功获取", "data": data, "alerts": alerts})
     except Exception as e:
         print("❌ 数据抓取失败:", str(e))
@@ -61,7 +73,10 @@ def get_history():
 @app.route("/api/open_interest", methods=["GET"])
 def get_open_interest():
     try:
-        data = asyncio.run(get_open_interest_data())
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        data = loop.run_until_complete(get_open_interest_data())
+        loop.close()
         alerts = check_open_interest_alerts(data)
         return jsonify({"message": "成功获取", "data": data, "alerts": alerts})
     except Exception as e:
@@ -77,6 +92,13 @@ def get_price_change_api():
         for item in current_data:
             symbol = item['symbol']
             current_price = item['price']
+            price_1m = get_price_change(symbol, 1)
+            price_2m = get_price_change(symbol, 2)
+            price_5m = get_price_change(symbol, 5)
+            price_20m = get_price_change(symbol, 20)
+            price_40m = get_price_change(symbol, 40)
+            price_1h = get_price_change(symbol, 60)
+
             def change(old):
                 if not old or old == 0: return 0
                 return round((current_price - old) / old * 100, 2)
@@ -85,12 +107,12 @@ def get_price_change_api():
                 "symbol": symbol,
                 "price": current_price,
                 "change": {
-                    "1m": change(get_price_change(symbol, 1)),
-                    "2m": change(get_price_change(symbol, 2)),
-                    "5m": change(get_price_change(symbol, 5)),
-                    "20m": change(get_price_change(symbol, 20)),
-                    "40m": change(get_price_change(symbol, 40)),
-                    "1h": change(get_price_change(symbol, 60)),
+                    "1m": change(price_1m),
+                    "2m": change(price_2m),
+                    "5m": change(price_5m),
+                    "20m": change(price_20m),
+                    "40m": change(price_40m),
+                    "1h": change(price_1h),
                 }
             })
 
@@ -103,6 +125,9 @@ def index():
     return "Hello from Render!"
 
 if __name__ == '__main__':
-    update_data()
+    # ✅ 启动前手动跑一次价格和持仓量更新
+    update_price_data()
+    update_open_interest_data()
+    # ✅ 启动服务
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=True)
