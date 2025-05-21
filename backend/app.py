@@ -1,87 +1,77 @@
 from flask import Flask, jsonify
 from flask_cors import CORS
-from binance_api import fetch_all_data
+from binance_api import fetch_all_data, get_open_interest_data
 from indicators import append_ema
 from alerts import check_ema_alerts, check_price_change_alerts, check_open_interest_alerts
-from database import save_data, get_latest_data
-from open_interest import get_open_interest_data
-from db import get_price_change, save_price_history, save_open_interest_data
+from database import save_data, get_latest_data, get_price_change
+from db import save_price_bulk, create_tables
 import asyncio
 import os
 import time
 
-# ✅ APScheduler 导入
 from apscheduler.schedulers.background import BackgroundScheduler
 
 app = Flask(__name__)
 CORS(app)
 
-# ✅ 拆分成两个定时任务函数
+# ✅ 价格数据定时更新任务
 def update_price_data():
     try:
         print("📈 正在抓取价格数据...")
         start = time.time()
         price_data = fetch_all_data()
-        save_price_history(price_data)
+        # ✅ 修改：使用正确的保存函数
+        db_data = [{
+            "symbol": item["symbol"],
+            "timestamp": time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime()),
+            "price": item["price"]
+        } for item in price_data]
+        save_price_bulk(db_data)
         print(f"✅ 价格数据已保存，用时 {time.time() - start:.2f}s")
     except Exception as e:
         print("❌ 价格数据保存失败:", e)
 
+# ✅ 持仓量数据定时更新任务（数据已由 get_open_interest_data 自动保存）
 def update_open_interest_data():
     try:
         print("📊 正在抓取持仓量数据...")
         start = time.time()
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        data = loop.run_until_complete(get_open_interest_data())
-        save_open_interest_data(data)
+        loop.run_until_complete(get_open_interest_data())
         loop.close()
-        print(f"✅ 持仓量数据已保存，用时 {time.time() - start:.2f}s")
+        print(f"✅ 持仓量数据已抓取并保存，用时 {time.time() - start:.2f}s")
     except Exception as e:
         print("❌ 持仓量数据保存失败:", e)
 
-# ✅ 创建调度器（每 1 分钟执行一次，并允许多个实例并发执行）
+# ✅ 定时器设置
 scheduler = BackgroundScheduler()
-scheduler.add_job(
-    update_price_data,
-    'interval',
-    minutes=5,
-    id='update_price_data',
-    max_instances=3,       # ✅ 允许最多3个同时运行
-    coalesce=True          # ✅ 如果有漏掉的只补一次，避免积压
-)
-scheduler.add_job(
-    update_open_interest_data,
-    'interval',
-    minutes=5,
-    id='update_open_interest_data',
-    max_instances=3,
-    coalesce=True
-)
+scheduler.add_job(update_price_data, 'interval', minutes=1, id='update_price_data', max_instances=3, coalesce=True)
+scheduler.add_job(update_open_interest_data, 'interval', minutes=1, id='update_open_interest_data', max_instances=3, coalesce=True)
 scheduler.start()
 
-# --- 接口定义 ---
+# ✅ 实时数据接口（价格 + EMA + 警报）
 @app.route("/api/data", methods=["GET"])
 def get_data():
     try:
         raw_data = fetch_all_data()
         data = append_ema(raw_data)
         save_data(data)
-
         alerts = {
             "ema_alerts": check_ema_alerts(data),
             "change_alerts": check_price_change_alerts(data)
         }
-
         return jsonify({"message": "成功获取", "data": data, "alerts": alerts})
     except Exception as e:
         print("❌ 数据抓取失败:", str(e))
         return jsonify({"message": "抓取失败", "data": [], "alerts": {}})
 
+# ✅ 价格历史
 @app.route("/api/history", methods=["GET"])
 def get_history():
     return jsonify(get_latest_data())
 
+# ✅ 实时持仓量接口
 @app.route("/api/open_interest", methods=["GET"])
 def get_open_interest():
     try:
@@ -95,6 +85,7 @@ def get_open_interest():
         print("❌ open_interest 接口错误:", e)
         return jsonify({"message": "获取失败", "error": str(e), "data": []}), 500
 
+# ✅ 涨跌幅接口
 @app.route("/api/price_change", methods=["GET"])
 def get_price_change_api():
     try:
@@ -137,10 +128,8 @@ def index():
     return "Hello from Render!"
 
 if __name__ == '__main__':
-    # ✅ 启动前手动跑一次价格和持仓量更新
-    update_price_data()
+    create_tables()                      # 自动建表
+    update_price_data()                 # 启动时跑一次
     update_open_interest_data()
-
-    # ✅ 启动服务
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=True)

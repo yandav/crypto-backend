@@ -1,35 +1,65 @@
-import sqlite3
-import json
-from datetime import datetime
+from sqlalchemy.orm import scoped_session
+from db import SessionLocal
+from sqlalchemy import desc
+from models import PriceData
+import datetime
 
-DB_NAME = "crypto.db"
-
-def init_db():
-    with sqlite3.connect(DB_NAME) as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS market_data (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp TEXT,
-                data TEXT
-            )
-        """)
-        conn.commit()
-
+# ✅ 保存实时数据（价格 + EMA）
 def save_data(data):
-    init_db()
-    with sqlite3.connect(DB_NAME) as conn:
-        cursor = conn.cursor()
-        cursor.execute("INSERT INTO market_data (timestamp, data) VALUES (?, ?)",
-                       (datetime.utcnow().isoformat(), json.dumps(data)))
-        conn.commit()
+    db = scoped_session(SessionLocal)
+    try:
+        for item in data:
+            entry = PriceData(
+                symbol=item['symbol'],
+                price=item['price'],
+                ema_7=item.get('ema_7'),
+                ema_25=item.get('ema_25'),
+                ema_99=item.get('ema_99'),
+                timestamp=datetime.datetime.utcnow()
+            )
+            db.add(entry)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        print("❌ save_data 保存失败:", e)
+    finally:
+        db.close()
 
-def get_latest_data():
-    init_db()
-    with sqlite3.connect(DB_NAME) as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT timestamp, data FROM market_data ORDER BY id DESC LIMIT 1")
-        row = cursor.fetchone()
-        if row:
-            return {"timestamp": row[0], "data": json.loads(row[1])}
-        return {"timestamp": None, "data": []}
+# ✅ 查询最近一次价格数据（历史页面）
+def get_latest_data(limit=100):
+    db = scoped_session(SessionLocal)
+    try:
+        results = db.query(PriceData).order_by(desc(PriceData.timestamp)).limit(limit).all()
+        return [
+            {
+                "symbol": row.symbol,
+                "price": row.price,
+                "ema_7": row.ema_7,
+                "ema_25": row.ema_25,
+                "ema_99": row.ema_99,
+                "timestamp": row.timestamp.strftime('%Y-%m-%d %H:%M:%S')
+            }
+            for row in results
+        ]
+    except Exception as e:
+        print("❌ 查询历史数据失败:", e)
+        return []
+    finally:
+        db.close()
+
+# ✅ 获取某个 symbol 指定分钟数前的价格（用于涨跌幅）
+def get_price_change(symbol, minutes_ago):
+    db = scoped_session(SessionLocal)
+    try:
+        target_time = datetime.datetime.utcnow() - datetime.timedelta(minutes=minutes_ago)
+        result = db.query(PriceData).filter(
+            PriceData.symbol == symbol,
+            PriceData.timestamp <= target_time
+        ).order_by(desc(PriceData.timestamp)).first()
+
+        return result.price if result else None
+    except Exception as e:
+        print(f"❌ get_price_change 失败: {symbol} {minutes_ago}min:", e)
+        return None
+    finally:
+        db.close()
