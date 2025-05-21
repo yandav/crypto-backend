@@ -8,6 +8,7 @@ Base = declarative_base()
 # ✅ 持仓量数据表
 class OpenInterest(Base):
     __tablename__ = "open_interest"
+    __table_args__ = {'extend_existing': True}
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     symbol = Column(String, nullable=False)
@@ -18,6 +19,7 @@ class OpenInterest(Base):
 # ✅ 实时价格历史（可选：你也可以不定义这个，如果只用 open_interest）
 class PriceHistory(Base):
     __tablename__ = "price_history"
+    __table_args__ = {'extend_existing': True}
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     symbol = Column(String, nullable=False)
@@ -27,6 +29,7 @@ class PriceHistory(Base):
 # ✅ 实时价格表：记录价格和 EMA 指标
 class PriceData(Base):
     __tablename__ = "price_data"
+    __table_args__ = {'extend_existing': True}
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     symbol = Column(String, nullable=False)
