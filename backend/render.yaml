@@ -4,7 +4,9 @@ services:
     env: python
     region: oregon
     buildCommand: ""
-    startCommand: "python init_db.py && python app.py"
+    # startCommand: "python init_db.py && python app.py"
+    startCommand: |
+      python init_db.py && python app.py
     envVars:
       - key: PORT
         value: 5000
