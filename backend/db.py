@@ -7,7 +7,11 @@ import threading
 import datetime
 
 # PostgreSQL 连接字符串
-DATABASE_URL = "postgresql+psycopg2://postgres:123456@localhost:5432/crypto_monitor"
+#postgresql+psycopg2://postgres:123456@localhost:5432/crypto_monitor
+#postgresql://yandavi_user:1UoakzxW06deiQhh03tVGpJvXMiin3g8@dpg-d0mrriu3jp1c738kgb60-a/yandavi
+DATABASE_URL = "postgresql+postgresql://yandavi_user:1UoakzxW06deiQhh03tVGpJvXMiin3g8@dpg-d0mrriu3jp1c738kgb60-a/yandavi"
+
+
 
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
