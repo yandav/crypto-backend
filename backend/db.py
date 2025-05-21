@@ -42,6 +42,37 @@ class Price(Base):
         PrimaryKeyConstraint('symbol', 'timestamp', name='price_pkey'),
     )
 
+    # ✅ 持仓量数据表
+    class OpenInterest(Base):
+        __tablename__ = "open_interest"
+
+        id = Column(Integer, primary_key=True, autoincrement=True)
+        symbol = Column(String, nullable=False)
+        open_interest = Column(Float, nullable=False)
+        change_pct = Column(Float, nullable=True)
+        timestamp = Column(DateTime, nullable=False)
+
+    # ✅ 实时价格历史（可选：你也可以不定义这个，如果只用 open_interest）
+    class PriceHistory(Base):
+        __tablename__ = "price_history"
+
+        id = Column(Integer, primary_key=True, autoincrement=True)
+        symbol = Column(String, nullable=False)
+        price = Column(Float, nullable=False)
+        timestamp = Column(DateTime, nullable=False)
+
+    # ✅ 实时价格表：记录价格和 EMA 指标
+    class PriceData(Base):
+        __tablename__ = "price_data"
+
+        id = Column(Integer, primary_key=True, autoincrement=True)
+        symbol = Column(String, nullable=False)
+        price = Column(Float, nullable=False)
+        ema_7 = Column(Float, nullable=True)
+        ema_25 = Column(Float, nullable=True)
+        ema_99 = Column(Float, nullable=True)
+        timestamp = Column(DateTime, nullable=False)
+
 
 # 上下文管理器，用于自动提交或回滚事务
 @contextmanager
