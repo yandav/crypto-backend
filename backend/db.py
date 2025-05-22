@@ -28,6 +28,7 @@ class OpenInterest(Base):
     symbol = Column(String, nullable=False)
     timestamp = Column(DateTime, nullable=False)
     open_interest = Column(Float, nullable=False)
+    change_pct = Column(Float, nullable=True)
     __table_args__ = (
         PrimaryKeyConstraint('symbol', 'timestamp', name='open_interest_pkey'),
     )

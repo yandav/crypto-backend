@@ -5,7 +5,7 @@ import asyncio
 from datetime import datetime, timedelta
 from sqlalchemy.orm import scoped_session
 from db import SessionLocal
-from models import OpenInterest
+from db import OpenInterest
 from db import get_previous_oi, save_open_interest_bulk
 
 # ✅ 从 Binance 获取所有 symbol
