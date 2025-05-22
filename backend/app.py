@@ -4,7 +4,7 @@ from binance_api import fetch_all_data, get_open_interest_data
 from indicators import append_ema
 from alerts import check_ema_alerts, check_price_change_alerts, check_open_interest_alerts
 from database import save_data, get_latest_data, get_price_change
-from db import save_price_bulk, create_tables
+from db import save_price_bulk, create_tables, SessionLocal, OpenInterest
 import asyncio
 import os
 import time
@@ -126,6 +126,19 @@ def get_price_change_api():
 @app.route('/')
 def index():
     return "Hello from Render!"
+
+@app.route("/debug/oi")
+def debug_oi():
+    session = SessionLocal()
+    results = session.query(OpenInterest).order_by(OpenInterest.timestamp.desc()).limit(5).all()
+    return jsonify([
+        {
+            "symbol": r.symbol,
+            "oi": r.open_interest,
+            "change": r.change_pct,
+            "ts": r.timestamp.isoformat()
+        } for r in results
+    ])
 
 
 if __name__ == '__main__':
