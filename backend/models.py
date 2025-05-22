@@ -26,15 +26,3 @@ class PriceHistory(Base):
     price = Column(Float, nullable=False)
     timestamp = Column(DateTime, nullable=False)
 
-# ✅ 实时价格表：记录价格和 EMA 指标
-class PriceData(Base):
-    __tablename__ = "price_data"
-    __table_args__ = {'extend_existing': True}
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    symbol = Column(String, nullable=False)
-    price = Column(Float, nullable=False)
-    ema_7 = Column(Float, nullable=True)
-    ema_25 = Column(Float, nullable=True)
-    ema_99 = Column(Float, nullable=True)
-    timestamp = Column(DateTime, nullable=False)

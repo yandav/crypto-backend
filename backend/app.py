@@ -127,6 +127,7 @@ def get_price_change_api():
 def index():
     return "Hello from Render!"
 
+
 if __name__ == '__main__':
     create_tables()                      # 自动建表
     update_price_data()                 # 启动时跑一次

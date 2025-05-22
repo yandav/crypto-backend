@@ -1,6 +1,5 @@
 from sqlalchemy import inspect
-from db import engine, SessionLocal
-from models import PriceData
+from db import engine, SessionLocal,PriceData
 
 def test_database():
     try:

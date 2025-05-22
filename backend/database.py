@@ -1,7 +1,6 @@
 from sqlalchemy.orm import scoped_session
-from db import SessionLocal
+from db import SessionLocal,PriceData
 from sqlalchemy import desc
-from models import PriceData
 import datetime
 
 # ✅ 保存实时数据（价格 + EMA）
