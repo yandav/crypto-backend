@@ -48,7 +48,7 @@ async def fetch_open_interest(session, symbol):
             "current_oi": float(data["openInterest"])
         }
     except Exception as e:
-        print(f"❌ 获取 {symbol} 持仓量失败: {e}")
+        # print(f"❌ 获取 {symbol} 持仓量失败: {e}")
         return None
 
 def calc_change(old, current):
