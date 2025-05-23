@@ -59,6 +59,18 @@ class PriceData(Base):
     ema_99 = Column(Float, nullable=True)
     timestamp = Column(DateTime, nullable=False)
 
+# ✅ 实时价格历史（可选：你也可以不定义这个，如果只用 open_interest）
+class PriceHistory(Base):
+    __tablename__ = "price_history"
+    __table_args__ = {'extend_existing': True}
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    symbol = Column(String, nullable=False)
+    price = Column(Float, nullable=False)
+    timestamp = Column(DateTime, nullable=False)
+
+
+
 # 上下文管理器，用于自动提交或回滚事务
 @contextmanager
 def session_scope():

@@ -4,19 +4,24 @@ from binance_api import fetch_all_data, get_open_interest_data
 from indicators import append_ema
 from alerts import check_ema_alerts, check_price_change_alerts, check_open_interest_alerts
 from database import save_data, get_latest_data, get_price_change
-from db import save_price_bulk, create_tables, SessionLocal, OpenInterest
+from db import save_price_bulk, create_tables, SessionLocal, OpenInterest, PriceHistory
 import asyncio
+import threading
 import os
 import time
+
 from apscheduler.schedulers.background import BackgroundScheduler
 
 app = Flask(__name__)
 CORS(app)
 
+# ✅ 持仓量锁
+open_interest_lock = threading.Lock()
+
 # ✅ 价格数据定时更新任务
 def update_price_data():
     try:
-        print(f"📈 正在抓取价格数据 @ {time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime())}")
+        print("📈 正在抓取价格数据...")
         start = time.time()
         price_data = fetch_all_data()
         db_data = [{
@@ -29,25 +34,30 @@ def update_price_data():
     except Exception as e:
         print("❌ 价格数据保存失败:", e)
 
-# ✅ 持仓量数据定时更新任务
+# ✅ 持仓量数据定时更新任务（防止重复运行）
 def update_open_interest_data():
-    try:
-        print(f"📊 正在抓取持仓量数据 @ {time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime())}")
-        start = time.time()
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(get_open_interest_data())
-        loop.close()
-        print(f"✅ 持仓量数据已抓取并保存，用时 {time.time() - start:.2f}s")
-    except Exception as e:
-        print("❌ 持仓量数据保存失败:", e)
+    if open_interest_lock.locked():
+        print("⚠️ 上一个持仓量任务仍在运行，跳过")
+        return
 
-# ✅ 初始化定时任务调度器（Render 上不自动执行）
+    with open_interest_lock:
+        try:
+            print(f"📊 正在抓取持仓量数据 @ {time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime())}")
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(get_open_interest_data())
+            loop.close()
+            print("✅ 持仓量数据已成功更新")
+        except Exception as e:
+            print("❌ 持仓量数据抓取失败:", e)
+
+# ✅ 定时任务
 scheduler = BackgroundScheduler()
 scheduler.add_job(update_price_data, 'interval', minutes=1, id='update_price_data', max_instances=1, coalesce=True)
 scheduler.add_job(update_open_interest_data, 'interval', minutes=1, id='update_open_interest_data', max_instances=1, coalesce=True)
+scheduler.start()
 
-# ✅ 接口：实时数据（价格 + EMA + 报警）
+# ✅ 实时数据接口（价格 + EMA + EMA 警报）
 @app.route("/api/data", methods=["GET"])
 def get_data():
     try:
@@ -63,12 +73,12 @@ def get_data():
         print("❌ 数据抓取失败:", str(e))
         return jsonify({"message": "抓取失败", "data": [], "alerts": {}})
 
-# ✅ 接口：价格历史
+# ✅ 历史价格数据
 @app.route("/api/history", methods=["GET"])
 def get_history():
     return jsonify(get_latest_data())
 
-# ✅ 接口：持仓量
+# ✅ 实时持仓量 + 报警
 @app.route("/api/open_interest", methods=["GET"])
 def get_open_interest():
     try:
@@ -82,7 +92,7 @@ def get_open_interest():
         print("❌ open_interest 接口错误:", e)
         return jsonify({"message": "获取失败", "error": str(e), "data": []}), 500
 
-# ✅ 接口：涨跌幅
+# ✅ 涨跌幅监控
 @app.route("/api/price_change", methods=["GET"])
 def get_price_change_api():
     try:
@@ -120,12 +130,12 @@ def get_price_change_api():
     except Exception as e:
         return jsonify({"message": "失败", "error": str(e)})
 
-# ✅ Render 默认首页
+# ✅ Render 首页测试
 @app.route('/')
 def index():
     return "Hello from Render!"
 
-# ✅ 调试接口：持仓量数据库内容
+# ✅ 调试：最近5条持仓量
 @app.route("/debug/oi")
 def debug_oi():
     session = SessionLocal()
@@ -139,13 +149,23 @@ def debug_oi():
         } for r in results
     ])
 
-# ✅ 主启动入口（仅本地时执行初始化和定时任务）
-if __name__ == '__main__':
-    if os.environ.get("FLASK_ENV") != "production":
-        create_tables()
-        update_price_data()
-        update_open_interest_data()
-        scheduler.start()
+# ✅ 调试：最近10条价格历史
+@app.route("/debug/history")
+def debug_history():
+    session = SessionLocal()
+    results = session.query(PriceHistory).order_by(PriceHistory.timestamp.desc()).limit(10).all()
+    return jsonify([
+        {
+            "symbol": r.symbol,
+            "price": r.price,
+            "ts": r.timestamp.isoformat()
+        } for r in results
+    ])
 
+# ✅ 启动入口
+if __name__ == '__main__':
+    create_tables()                      # 自动建表
+    update_price_data()                 # 启动时跑一次
+    update_open_interest_data()
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=True)
