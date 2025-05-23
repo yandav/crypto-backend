@@ -1,3 +1,5 @@
+# database.py
+
 from sqlalchemy.orm import scoped_session
 from db import SessionLocal,PriceData
 from sqlalchemy import desc

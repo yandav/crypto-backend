@@ -1,3 +1,5 @@
+# app.py
+
 from flask import Flask, jsonify
 from flask_cors import CORS
 from binance_api import fetch_all_data, get_open_interest_data

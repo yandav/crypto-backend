@@ -1,3 +1,5 @@
+# db.py
+
 from sqlalchemy import create_engine, Column, String, Float, DateTime, PrimaryKeyConstraint, Integer
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import scoped_session, sessionmaker
