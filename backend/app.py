@@ -1,5 +1,3 @@
-# app.py
-
 from flask import Flask, jsonify
 from flask_cors import CORS
 from binance_api import fetch_all_data, get_open_interest_data
@@ -10,7 +8,6 @@ from db import save_price_bulk, create_tables, SessionLocal, OpenInterest
 import asyncio
 import os
 import time
-
 from apscheduler.schedulers.background import BackgroundScheduler
 
 app = Flask(__name__)
@@ -19,10 +16,9 @@ CORS(app)
 # ✅ 价格数据定时更新任务
 def update_price_data():
     try:
-        print("📈 正在抓取价格数据...")
+        print(f"📈 正在抓取价格数据 @ {time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime())}")
         start = time.time()
         price_data = fetch_all_data()
-        # ✅ 修改：使用正确的保存函数
         db_data = [{
             "symbol": item["symbol"],
             "timestamp": time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime()),
@@ -33,10 +29,10 @@ def update_price_data():
     except Exception as e:
         print("❌ 价格数据保存失败:", e)
 
-# ✅ 持仓量数据定时更新任务（数据已由 get_open_interest_data 自动保存）
+# ✅ 持仓量数据定时更新任务
 def update_open_interest_data():
     try:
-        print("📊 正在抓取持仓量数据...")
+        print(f"📊 正在抓取持仓量数据 @ {time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime())}")
         start = time.time()
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
@@ -46,13 +42,12 @@ def update_open_interest_data():
     except Exception as e:
         print("❌ 持仓量数据保存失败:", e)
 
-# ✅ 定时器设置
+# ✅ 初始化定时任务调度器（Render 上不自动执行）
 scheduler = BackgroundScheduler()
-scheduler.add_job(update_price_data, 'interval', minutes=1, id='update_price_data', max_instances=3, coalesce=True)
-scheduler.add_job(update_open_interest_data, 'interval', minutes=1, id='update_open_interest_data', max_instances=3, coalesce=True)
-scheduler.start()
+scheduler.add_job(update_price_data, 'interval', minutes=1, id='update_price_data', max_instances=1, coalesce=True)
+scheduler.add_job(update_open_interest_data, 'interval', minutes=1, id='update_open_interest_data', max_instances=1, coalesce=True)
 
-# ✅ 实时数据接口（价格 + EMA + 警报）
+# ✅ 接口：实时数据（价格 + EMA + 报警）
 @app.route("/api/data", methods=["GET"])
 def get_data():
     try:
@@ -68,12 +63,12 @@ def get_data():
         print("❌ 数据抓取失败:", str(e))
         return jsonify({"message": "抓取失败", "data": [], "alerts": {}})
 
-# ✅ 价格历史
+# ✅ 接口：价格历史
 @app.route("/api/history", methods=["GET"])
 def get_history():
     return jsonify(get_latest_data())
 
-# ✅ 实时持仓量接口
+# ✅ 接口：持仓量
 @app.route("/api/open_interest", methods=["GET"])
 def get_open_interest():
     try:
@@ -87,7 +82,7 @@ def get_open_interest():
         print("❌ open_interest 接口错误:", e)
         return jsonify({"message": "获取失败", "error": str(e), "data": []}), 500
 
-# ✅ 涨跌幅接口
+# ✅ 接口：涨跌幅
 @app.route("/api/price_change", methods=["GET"])
 def get_price_change_api():
     try:
@@ -125,10 +120,12 @@ def get_price_change_api():
     except Exception as e:
         return jsonify({"message": "失败", "error": str(e)})
 
+# ✅ Render 默认首页
 @app.route('/')
 def index():
     return "Hello from Render!"
 
+# ✅ 调试接口：持仓量数据库内容
 @app.route("/debug/oi")
 def debug_oi():
     session = SessionLocal()
@@ -142,10 +139,13 @@ def debug_oi():
         } for r in results
     ])
 
-
+# ✅ 主启动入口（仅本地时执行初始化和定时任务）
 if __name__ == '__main__':
-    create_tables()                      # 自动建表
-    update_price_data()                 # 启动时跑一次
-    update_open_interest_data()
+    if os.environ.get("FLASK_ENV") != "production":
+        create_tables()
+        update_price_data()
+        update_open_interest_data()
+        scheduler.start()
+
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=True)
