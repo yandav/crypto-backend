@@ -4,9 +4,8 @@ from binance_api import fetch_all_data, get_open_interest_data
 from indicators import append_ema
 from alerts import check_ema_alerts, check_price_change_alerts, check_open_interest_alerts
 from database import save_data, get_latest_data, get_price_change
-from db import save_price_bulk, create_tables, SessionLocal, OpenInterest, PriceHistory
+from db import save_price_bulk, create_tables, SessionLocal, OpenInterest
 import asyncio
-import threading
 import os
 import time
 
@@ -15,10 +14,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 app = Flask(__name__)
 CORS(app)
 
-# ✅ 持仓量锁
-open_interest_lock = threading.Lock()
-
-# ✅ 价格数据定时更新任务
+# ✅ 定时任务：更新价格数据
 def update_price_data():
     try:
         print("📈 正在抓取价格数据...")
@@ -34,30 +30,31 @@ def update_price_data():
     except Exception as e:
         print("❌ 价格数据保存失败:", e)
 
-# ✅ 持仓量数据定时更新任务（防止重复运行）
+# ✅ 定时任务：更新持仓量数据（自动保存）
+open_interest_lock = asyncio.Lock()
+async def safe_get_open_interest():
+    async with open_interest_lock:
+        await get_open_interest_data()
+
 def update_open_interest_data():
-    if open_interest_lock.locked():
-        print("⚠️ 上一个持仓量任务仍在运行，跳过")
-        return
+    try:
+        print("📊 正在抓取持仓量数据...")
+        start = time.time()
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(safe_get_open_interest())
+        loop.close()
+        print(f"✅ 持仓量数据已抓取并保存，用时 {time.time() - start:.2f}s")
+    except Exception as e:
+        print("❌ 持仓量数据保存失败:", e)
 
-    with open_interest_lock:
-        try:
-            print(f"📊 正在抓取持仓量数据 @ {time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime())}")
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(get_open_interest_data())
-            loop.close()
-            print("✅ 持仓量数据已成功更新")
-        except Exception as e:
-            print("❌ 持仓量数据抓取失败:", e)
-
-# ✅ 定时任务
+# ✅ 定时器启动
 scheduler = BackgroundScheduler()
 scheduler.add_job(update_price_data, 'interval', minutes=1, id='update_price_data', max_instances=1, coalesce=True)
 scheduler.add_job(update_open_interest_data, 'interval', minutes=1, id='update_open_interest_data', max_instances=1, coalesce=True)
 scheduler.start()
 
-# ✅ 实时数据接口（价格 + EMA + EMA 警报）
+# ✅ 实时数据接口
 @app.route("/api/data", methods=["GET"])
 def get_data():
     try:
@@ -73,26 +70,38 @@ def get_data():
         print("❌ 数据抓取失败:", str(e))
         return jsonify({"message": "抓取失败", "data": [], "alerts": {}})
 
-# ✅ 历史价格数据
+# ✅ 历史数据接口
 @app.route("/api/history", methods=["GET"])
 def get_history():
     return jsonify(get_latest_data())
 
-# ✅ 实时持仓量 + 报警
+# ✅ 实时持仓量接口
 @app.route("/api/open_interest", methods=["GET"])
 def get_open_interest():
     try:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        data = loop.run_until_complete(get_open_interest_data())
+        loop.run_until_complete(safe_get_open_interest())
         loop.close()
+
+        session = SessionLocal()
+        records = session.query(OpenInterest).order_by(OpenInterest.timestamp.desc()).limit(100).all()
+        session.close()
+
+        data = [{
+            "symbol": r.symbol,
+            "open_interest": r.open_interest,
+            "change_pct": r.change_pct,
+            "timestamp": r.timestamp.isoformat()
+        } for r in records]
+
         alerts = check_open_interest_alerts(data)
         return jsonify({"message": "成功获取", "data": data, "alerts": alerts})
     except Exception as e:
         print("❌ open_interest 接口错误:", e)
         return jsonify({"message": "获取失败", "error": str(e), "data": []}), 500
 
-# ✅ 涨跌幅监控
+# ✅ 涨跌幅接口
 @app.route("/api/price_change", methods=["GET"])
 def get_price_change_api():
     try:
@@ -110,7 +119,8 @@ def get_price_change_api():
             price_1h = get_price_change(symbol, 60)
 
             def change(old):
-                if not old or old == 0: return 0
+                if not old or old == 0:
+                    return 0
                 return round((current_price - old) / old * 100, 2)
 
             result.append({
@@ -128,18 +138,20 @@ def get_price_change_api():
 
         return jsonify({"message": "成功", "data": result})
     except Exception as e:
+        print("❌ 涨跌幅接口错误:", str(e))
         return jsonify({"message": "失败", "error": str(e)})
 
-# ✅ Render 首页测试
+# ✅ 首页测试
 @app.route('/')
 def index():
     return "Hello from Render!"
 
-# ✅ 调试：最近5条持仓量
+# ✅ 调试接口：持仓量数据
 @app.route("/debug/oi")
 def debug_oi():
     session = SessionLocal()
     results = session.query(OpenInterest).order_by(OpenInterest.timestamp.desc()).limit(5).all()
+    session.close()
     return jsonify([
         {
             "symbol": r.symbol,
@@ -149,23 +161,10 @@ def debug_oi():
         } for r in results
     ])
 
-# ✅ 调试：最近10条价格历史
-@app.route("/debug/history")
-def debug_history():
-    session = SessionLocal()
-    results = session.query(PriceHistory).order_by(PriceHistory.timestamp.desc()).limit(10).all()
-    return jsonify([
-        {
-            "symbol": r.symbol,
-            "price": r.price,
-            "ts": r.timestamp.isoformat()
-        } for r in results
-    ])
-
 # ✅ 启动入口
 if __name__ == '__main__':
-    create_tables()                      # 自动建表
-    update_price_data()                 # 启动时跑一次
+    create_tables()
+    update_price_data()
     update_open_interest_data()
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=True)
