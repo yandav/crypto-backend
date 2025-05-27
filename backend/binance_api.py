@@ -75,10 +75,15 @@ async def get_open_interest_data():
     now = datetime.utcnow()
 
     for item in raw_results:
-        if not item:
+        if not item or not item.get("symbol") or not item.get("current_oi"):  # Add null check
             continue
+        
         symbol = item["symbol"]
         current_oi = item["current_oi"]
+        
+        if not isinstance(current_oi, (int, float)) or current_oi <= 0:  # Validate OI value
+            continue
+            
         result.append({
             "symbol": symbol,
             "fundingRate": funding_dict.get(symbol, 0.0),
@@ -89,12 +94,19 @@ async def get_open_interest_data():
                 "1h": calc_change(get_previous_oi(symbol, 60), current_oi),
             }
         })
+        
+        # Only add valid data to database items
         db_items.append({
             "symbol": symbol,
             "timestamp": now,
-            "open_interest": current_oi
+            "open_interest": current_oi,
+            "change_pct": 0.0  # Default value for change percentage
         })
 
-    save_open_interest_bulk(db_items)
-    print(f"✅ 持仓量数据抓取完成，用时 {time.time() - start:.2f}s，共 {len(result)} 个币种")
+    if db_items:  # Only save if we have valid items
+        save_open_interest_bulk(db_items)
+        print(f"✅ 持仓量数据抓取完成，用时 {time.time() - start:.2f}s，共 {len(result)} 个币种")
+    else:
+        print("⚠️ 没有有效的持仓量数据可保存")
+    
     return result

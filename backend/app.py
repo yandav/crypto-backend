@@ -1,3 +1,5 @@
+#app.py
+
 from flask import Flask, jsonify
 from flask_cors import CORS
 from binance_api import fetch_all_data, get_open_interest_data
@@ -32,18 +34,25 @@ def update_price_data():
 
 # ✅ 定时任务：更新持仓量数据（自动保存）
 open_interest_lock = asyncio.Lock()
-async def safe_get_open_interest():
-    async with open_interest_lock:
-        await get_open_interest_data()
 
 def update_open_interest_data():
     try:
         print("📊 正在抓取持仓量数据...")
         start = time.time()
+        
+        # Create a new event loop for this thread
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        loop.run_until_complete(safe_get_open_interest())
-        loop.close()
+        
+        async def run_task():
+            async with open_interest_lock:
+                return await get_open_interest_data()
+                
+        try:
+            loop.run_until_complete(run_task())
+        finally:
+            loop.close()
+            
         print(f"✅ 持仓量数据已抓取并保存，用时 {time.time() - start:.2f}s")
     except Exception as e:
         print("❌ 持仓量数据保存失败:", e)

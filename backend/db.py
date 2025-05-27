@@ -16,7 +16,15 @@ DATABASE_URL = "postgresql://yandavi_ibqv_user:uOOPuNALuKxsmDuFz73bE0Vz1ZoL65IS@
 
 
 
-engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+#engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+engine = create_engine(
+    DATABASE_URL,
+    pool_size=5,         # Reduced from 10 to prevent overwhelming the free tier database
+    max_overflow=10,     # Reduced from 20
+    pool_timeout=60,     # Increased from 30s to 60s to allow more time for connections
+    pool_recycle=1800,   # Keep this the same
+    pool_pre_ping=True   # Add connection health check
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 SessionFactory = sessionmaker(bind=engine)
 Session = scoped_session(SessionFactory)
