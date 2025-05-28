@@ -1,0 +1,28 @@
+name: Trigger Backend API Cron
+
+on:
+  schedule:
+    - cron: '*/1 * * * *'  # 每分钟运行一次
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  trigger-api:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Price Data Update
+        run: |
+          curl -X GET "https://crypto-api.onrender.com/api/data" \
+          -H "Accept: application/json"
+          
+      - name: Trigger Open Interest Update
+        run: |
+          curl -X GET "https://crypto-api.onrender.com/api/open_interest" \
+          -H "Accept: application/json"
+          
+      - name: Trigger Price Change Update
+        run: |
+          curl -X GET "https://crypto-api.onrender.com/api/price_change" \
+          -H "Accept: application/json"
+          
+      - name: Sleep for 3 seconds between requests
+        run: sleep 3  # 在请求之间添加短暂延迟，避免并发问题 
