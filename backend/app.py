@@ -12,6 +12,7 @@ import os
 import time
 
 from apscheduler.schedulers.background import BackgroundScheduler
+import atexit
 
 app = Flask(__name__)
 CORS(app)
@@ -58,9 +59,19 @@ def update_open_interest_data():
         print("❌ 持仓量数据保存失败:", e)
 
 # ✅ 定时器启动
-scheduler = BackgroundScheduler()
-scheduler.add_job(update_price_data, 'interval', minutes=1, id='update_price_data', max_instances=1, coalesce=True)
-scheduler.add_job(update_open_interest_data, 'interval', minutes=1, id='update_open_interest_data', max_instances=1, coalesce=True)
+scheduler = BackgroundScheduler(
+    job_defaults={
+        'max_instances': 1,
+        'coalesce': True,
+        'misfire_grace_time': 60
+    }
+)
+scheduler.add_job(update_price_data, 'interval', minutes=1, id='update_price_data')
+scheduler.add_job(update_open_interest_data, 'interval', minutes=1, id='update_open_interest_data')
+
+# 确保程序退出时关闭调度器
+atexit.register(lambda: scheduler.shutdown())
+
 scheduler.start()
 
 # ✅ 实时数据接口
@@ -88,24 +99,22 @@ def get_history():
 @app.route("/api/open_interest", methods=["GET"])
 def get_open_interest():
     try:
+        # Create a new event loop for this request
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        loop.run_until_complete(safe_get_open_interest())
-        loop.close()
-
-        session = SessionLocal()
-        records = session.query(OpenInterest).order_by(OpenInterest.timestamp.desc()).limit(100).all()
-        session.close()
-
-        data = [{
-            "symbol": r.symbol,
-            "open_interest": r.open_interest,
-            "change_pct": r.change_pct,
-            "timestamp": r.timestamp.isoformat()
-        } for r in records]
-
-        alerts = check_open_interest_alerts(data)
-        return jsonify({"message": "成功获取", "data": data, "alerts": alerts})
+        
+        async def run_task():
+            async with open_interest_lock:
+                return await get_open_interest_data()
+                
+        try:
+            result = loop.run_until_complete(run_task())
+            return jsonify({"message": "成功获取", "data": result})
+        except Exception as e:
+            print("❌ open_interest 数据获取失败:", e)
+            return jsonify({"message": "获取失败", "error": str(e), "data": []}), 500
+        finally:
+            loop.close()
     except Exception as e:
         print("❌ open_interest 接口错误:", e)
         return jsonify({"message": "获取失败", "error": str(e), "data": []}), 500

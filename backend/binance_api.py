@@ -38,20 +38,37 @@ def get_valid_symbols():
             if s["contractType"] == "PERPETUAL" and s["quoteAsset"] == "USDT"]
 
 async def fetch_open_interest(session, symbol):
-    try:
-        await asyncio.sleep(0.1)
-        url = f"{BASE_URL}/fapi/v1/openInterest"
-        resp = await session.get(url, params={"symbol": symbol}, timeout=10.0)
-        data = resp.json()
-        if "openInterest" not in data:
+    max_retries = 3
+    retry_delay = 1
+    
+    for attempt in range(max_retries):
+        try:
+            await asyncio.sleep(0.1)  # Rate limiting
+            url = f"{BASE_URL}/fapi/v1/openInterest"
+            async with session.get(url, params={"symbol": symbol}, timeout=30.0) as resp:
+                if resp.status != 200:
+                    print(f"❌ {symbol} API 返回状态码: {resp.status}")
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(retry_delay)
+                        continue
+                    return None
+                    
+                data = await resp.json()
+                if "openInterest" not in data:
+                    return None
+                    
+                return {
+                    "symbol": symbol,
+                    "current_oi": float(data["openInterest"])
+                }
+        except Exception as e:
+            if attempt < max_retries - 1:
+                await asyncio.sleep(retry_delay)
+                continue
+            print(f"❌ 获取 {symbol} 持仓量失败: {e}")
             return None
-        return {
-            "symbol": symbol,
-            "current_oi": float(data["openInterest"])
-        }
-    except Exception as e:
-        # print(f"❌ 获取 {symbol} 持仓量失败: {e}")
-        return None
+    
+    return None
 
 def calc_change(old, current):
     if old is None or old == 0:
