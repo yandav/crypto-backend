@@ -10,9 +10,8 @@ import datetime
 
 # PostgreSQL 连接字符串
 #postgresql+psycopg2://postgres:123456@localhost:5432/crypto_monitor
-#postgresql://yandavi_user:1UoakzxW06deiQhh03tVGpJvXMiin3g8@dpg-d0mrriu3jp1c738kgb60-a/yandavi
-#postgresql://yandavi_ibqv_user:uOOPuNALuKxsmDuFz73bE0Vz1ZoL65IS@dpg-d0o8eb6mcj7s73e8fphg-a/yandavi_ibqv
-DATABASE_URL = "postgresql://yandavi_ibqv_user:uOOPuNALuKxsmDuFz73bE0Vz1ZoL65IS@dpg-d0o8eb6mcj7s73e8fphg-a/yandavi_ibqv"
+#postgresql://yandavi_mc67_user:JsQWGa8gStDxawz2OIHsrmUnqgDLJAnS@dpg-d0ssul6mcj7s73fcco6g-a/yandavi_mc67
+DATABASE_URL = "postgresql://yandavi_mc67_user:JsQWGa8gStDxawz2OIHsrmUnqgDLJAnS@dpg-d0ssul6mcj7s73fcco6g-a/yandavi_mc67"
 
 
 

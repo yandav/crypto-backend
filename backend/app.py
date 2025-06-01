@@ -102,13 +102,9 @@ def get_open_interest():
         # Create a new event loop for this request
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        
-        async def run_task():
-            async with open_interest_lock:
-                return await get_open_interest_data()
-                
+
         try:
-            result = loop.run_until_complete(run_task())
+            result = loop.run_until_complete(get_open_interest_data())
             return jsonify({"message": "成功获取", "data": result})
         except Exception as e:
             print("❌ open_interest 数据获取失败:", e)

@@ -35,39 +35,57 @@ def fetch_all_data():
 def get_valid_symbols():
     resp = httpx.get(f"{BASE_URL}/fapi/v1/exchangeInfo").json()
     return [s["symbol"] for s in resp["symbols"]
-            if s["contractType"] == "PERPETUAL" and s["quoteAsset"] == "USDT"]
+            if s["contractType"] == "PERPETUAL" 
+            and s["quoteAsset"] == "USDT"
+            and s["status"] == "TRADING"  # 只获取当前正在交易的币对
+            and s.get("underlyingType", "") == "COIN"  # 确保是币本位合约
+            ]
 
 async def fetch_open_interest(session, symbol):
     max_retries = 3
     retry_delay = 1
-    
+
     for attempt in range(max_retries):
         try:
             await asyncio.sleep(0.1)  # Rate limiting
             url = f"{BASE_URL}/fapi/v1/openInterest"
-            async with session.get(url, params={"symbol": symbol}, timeout=30.0) as resp:
-                if resp.status != 200:
-                    print(f"❌ {symbol} API 返回状态码: {resp.status}")
-                    if attempt < max_retries - 1:
-                        await asyncio.sleep(retry_delay)
-                        continue
-                    return None
-                    
-                data = await resp.json()
-                if "openInterest" not in data:
-                    return None
-                    
-                return {
-                    "symbol": symbol,
-                    "current_oi": float(data["openInterest"])
-                }
+            response = await session.get(url, params={"symbol": symbol}, timeout=30.0)
+            
+            if response.status_code == 400:
+                # 如果是400错误，说明该交易对不存在或已下线，直接返回None无需重试
+                print(f"⚠️ {symbol} 可能已下线或不支持永续合约")
+                return None
+            elif response.status_code != 200:
+                print(f"❌ {symbol} API 返回状态码: {response.status_code}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(retry_delay)
+                    continue
+                return None
+
+            try:
+                data = response.json()
+            except Exception as e:
+                print(f"❌ {symbol} 响应解析失败: {e}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(retry_delay)
+                    continue
+                return None
+
+            if "openInterest" not in data:
+                print(f"⚠️ {symbol} 返回数据格式异常")
+                return None
+
+            return {
+                "symbol": symbol,
+                "current_oi": float(data["openInterest"])
+            }
         except Exception as e:
             if attempt < max_retries - 1:
                 await asyncio.sleep(retry_delay)
                 continue
             print(f"❌ 获取 {symbol} 持仓量失败: {e}")
             return None
-    
+
     return None
 
 def calc_change(old, current):
@@ -83,9 +101,12 @@ async def get_open_interest_data():
     premium_data = httpx.get(f"{BASE_URL}/fapi/v1/premiumIndex").json()
     funding_dict = {d["symbol"]: float(d.get("lastFundingRate") or 0.0) for d in premium_data}
 
-    async with httpx.AsyncClient() as client:
+    client = httpx.AsyncClient()
+    try:
         tasks = [fetch_open_interest(client, symbol) for symbol in symbols]
         raw_results = await asyncio.gather(*tasks)
+    finally:
+        await client.aclose()
 
     result = []
     db_items = []
