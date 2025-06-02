@@ -11,7 +11,7 @@ import datetime
 # PostgreSQL 连接字符串
 #postgresql+psycopg2://postgres:123456@localhost:5432/crypto_monitor
 #postgresql://yandavi_mc67_user:JsQWGa8gStDxawz2OIHsrmUnqgDLJAnS@dpg-d0ssul6mcj7s73fcco6g-a/yandavi_mc67
-DATABASE_URL = "postgresql://yandavi_mc67_user:JsQWGa8gStDxawz2OIHsrmUnqgDLJAnS@dpg-d0ssul6mcj7s73fcco6g-a/yandavi_mc67"
+DATABASE_URL = "postgresql+psycopg2://postgres:123456@localhost:5432/crypto_monitor"
 
 
 
