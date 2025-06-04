@@ -1,11 +1,4 @@
 #!/bin/bash
-# 设置环境变量
-export RENDER="true"
-
-# 打印环境信息
-echo "Starting application in Render environment"
-echo "DATABASE_URL: $DATABASE_URL"
-
 # Initialize the database
 python init_db.py
 
