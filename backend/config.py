@@ -78,6 +78,14 @@ class Config:
     if DATABASE_URL and DATABASE_URL.startswith('postgres://'):
         DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
     
+    # 在Render环境中，确保使用环境变量中的DATABASE_URL
+    if os.getenv("RENDER"):
+        print(f"Running in Render environment, using DATABASE_URL from environment")
+        DATABASE_URL = os.getenv('DATABASE_URL')
+        if DATABASE_URL and DATABASE_URL.startswith('postgres://'):
+            DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
+        print(f"Configured DATABASE_URL: {DATABASE_URL}")
+    
     DB_POOL_SIZE = int(os.getenv('DB_POOL_SIZE', "5"))
     DB_MAX_OVERFLOW = int(os.getenv('DB_MAX_OVERFLOW', "10"))
     DB_POOL_TIMEOUT = int(os.getenv('DB_POOL_TIMEOUT', "60"))
@@ -99,15 +107,22 @@ class Config:
 
     @classmethod
     def get_db_config(cls) -> Dict[str, Any]:
-        return {
+        is_render = os.getenv("RENDER") == "true"
+        
+        config = {
             "url": cls.DATABASE_URL,
             "pool_size": cls.DB_POOL_SIZE,
             "max_overflow": cls.DB_MAX_OVERFLOW,
             "pool_timeout": cls.DB_POOL_TIMEOUT,
             "pool_recycle": cls.DB_POOL_RECYCLE,
             "pool_pre_ping": True,
-            # 在Render环境中启用SSL
-            "connect_args": {"sslmode": "require"} if os.getenv("RENDER") else {}
         }
+        
+        # 在Render环境中启用SSL
+        if is_render:
+            config["connect_args"] = {"sslmode": "require"}
+            print("Enabled SSL for database connection in Render environment")
+        
+        return config
 
 config = Config() 
