@@ -3,12 +3,31 @@ services:
     name: crypto-api
     env: python
     region: oregon
-    buildCommand: ""
-    startCommand: "python init_db.py && python app.py"
-    #startCommand: |
-    #  python init_db.py && python app.py
+    buildCommand: "pip install -r requirements.txt && chmod +x startup.sh"
+    startCommand: "./startup.sh"
+    healthCheckPath: /api/data
     envVars:
       - key: PORT
         value: 5000
+      - key: DATABASE_URL
+        sync: false # 这将允许你在Render仪表板中设置数据库URL
+      - key: PRICE_UPDATE_INTERVAL
+        value: 1
+      - key: OPEN_INTEREST_UPDATE_INTERVAL
+        value: 1
+      - key: DATA_RETENTION_DAYS
+        value: 30
+      - key: DB_POOL_SIZE
+        value: 5
+      - key: DB_MAX_OVERFLOW
+        value: 10
+      - key: DB_POOL_TIMEOUT
+        value: 60
+      - key: DB_POOL_RECYCLE
+        value: 3600
+      - key: RENDER
+        value: true
+      - key: CORS_ORIGIN
+        value: https://crypto-monitor.vercel.app # 替换为你的Vercel前端URL
     plan: free
     rootDir: backend

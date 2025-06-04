@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: crypto-monitor-frontend
+    env: node
+    region: oregon
+    buildCommand: cd crypto-monitor-vue && npm install && npm run build
+    staticPublishPath: crypto-monitor-vue/dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://crypto-api.onrender.com # 替换为你的后端API URL
+    plan: free 

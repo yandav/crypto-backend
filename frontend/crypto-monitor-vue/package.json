@@ -1,12 +1,13 @@
 {
   "name": "crypto-monitor-vue",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "deploy": "vite build && echo '部署完成'"
   },
   "dependencies": {
     "axios": "^1.9.0",
@@ -17,6 +18,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.2.3",
+    "terser": "^5.29.2",
     "vite": "^6.3.5"
   }
 }
