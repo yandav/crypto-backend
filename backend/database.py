@@ -191,7 +191,7 @@ def get_price_history(symbol: str, minutes_ago: int) -> Optional[float]:
             # 如果 prices 表查询失败，尝试使用原始 SQL 查询 price 表
             try:
                 sql = text("""
-                    SELECT price FROM price 
+                    SELECT price FROM prices 
                     WHERE symbol = :symbol AND timestamp <= :target_time 
                     ORDER BY timestamp DESC 
                     LIMIT 1
@@ -203,7 +203,7 @@ def get_price_history(symbol: str, minutes_ago: int) -> Optional[float]:
                     price_history_cache.set(cache_key, price)
                     return price
             except Exception as e:
-                logger.warning(f"从 price 表查询失败: {str(e)}")
+                logger.warning(f"从 prices 表查询失败: {str(e)}")
             
             # 如果都没有找到数据，返回 None
             return None
@@ -376,7 +376,7 @@ def get_latest_data(symbol: Optional[str] = None, limit: int = 100) -> List[Dict
             # 如果 prices 表查询失败，尝试使用原始 SQL 查询 price 表
             try:
                 sql = text("""
-                    SELECT symbol, price, timestamp FROM price 
+                    SELECT symbol, price, timestamp FROM prices 
                     WHERE symbol = :symbol OR :symbol IS NULL
                     ORDER BY timestamp DESC 
                     LIMIT :limit
@@ -393,7 +393,7 @@ def get_latest_data(symbol: Optional[str] = None, limit: int = 100) -> List[Dict
                 latest_data_cache.set(cache_key, data)
                 return data
             except Exception as e:
-                logger.warning(f"从 price 表查询最新数据失败: {str(e)}")
+                logger.warning(f"从 prices 表查询最新数据失败: {str(e)}")
             
             # 如果都没有找到数据，返回空列表
             return []
@@ -421,11 +421,11 @@ def cleanup_old_data(days: int = None) -> None:
                 
                 # 尝试使用原始 SQL 清理 price 表
                 try:
-                    sql = text("DELETE FROM price WHERE timestamp < :cutoff_date")
+                    sql = text("DELETE FROM prices WHERE timestamp < :cutoff_date")
                     result = session.execute(sql, {"cutoff_date": cutoff_date})
-                    logger.info(f"从 price 表删除了记录")
+                    logger.info(f"从 prices 表删除了记录")
                 except Exception as e:
-                    logger.warning(f"清理 price 表失败: {str(e)}")
+                    logger.warning(f"清理 prices 表失败: {str(e)}")
             
             # 清理持仓量数据
             try:

@@ -70,12 +70,12 @@ class OpenInterest(Base):
 
 
 class Price(Base):
-    __tablename__ = 'price'
+    __tablename__ = 'prices'
     symbol = Column(String, nullable=False)
     timestamp = Column(DateTime, nullable=False)
     price = Column(Float, nullable=False)
     __table_args__ = (
-        PrimaryKeyConstraint('symbol', 'timestamp', name='price_pkey'),
+        PrimaryKeyConstraint('symbol', 'timestamp', name='prices_pkey'),
     )
 
 # ✅ 实时价格表：记录价格和 EMA 指标
