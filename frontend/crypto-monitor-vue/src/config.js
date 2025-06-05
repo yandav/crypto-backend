@@ -53,7 +53,7 @@ const config = {
   
   // 生产环境配置
   [ENV.PROD]: {
-    apiBaseUrl: import.meta.env.VITE_API_URL || 'https://crypto-api.onrender.com',
+    apiBaseUrl: import.meta.env.VITE_API_URL || 'https://crypto-backend-2.onrender.com',
     apiTimeout: 15000,
     debug: false,
     sourcemap: import.meta.env.VITE_ENABLE_SOURCEMAP === 'true',

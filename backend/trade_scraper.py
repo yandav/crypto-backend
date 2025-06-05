@@ -26,6 +26,7 @@ class AoyingCapitalScraper:
         self.trader_name = "熬鹰资本"
         self.trader_id = None
         self.fallback_to_mock = fallback_to_mock  # 是否在真实爬虫失败时回退到模拟数据
+        self.encrypted_uid = "9FAD2A7F8D2B3F35A7F58D8B6F5CC6F7"  # 熬鹰资本的加密ID
     
     async def ensure_trader_exists(self) -> int:
         """确保交易员存在于数据库中"""
@@ -66,7 +67,7 @@ class AoyingCapitalScraper:
             return ""
     
     async def fetch_api_data(self) -> List[Dict[str, Any]]:
-        """从币安API获取交易数据"""
+        """从币安API获取当前持仓数据"""
         try:
             # 币安API地址，可能需要根据实际情况调整
             api_url = "https://www.binance.com/bapi/futures/v1/public/future/leaderboard/getOtherPosition"
@@ -80,7 +81,7 @@ class AoyingCapitalScraper:
             
             # 请求参数，encryptedUid是熬鹰资本的用户ID
             payload = {
-                "encryptedUid": "9FAD2A7F8D2B3F35A7F58D8B6F5CC6F7",
+                "encryptedUid": self.encrypted_uid,
                 "tradeType": "PERPETUAL"
             }
             
@@ -96,6 +97,46 @@ class AoyingCapitalScraper:
                     return []
         except Exception as e:
             logger.error(f"获取API数据失败: {str(e)}")
+            return []
+    
+    async def fetch_position_history(self) -> List[Dict[str, Any]]:
+        """从币安API获取历史交易数据"""
+        try:
+            # 币安历史交易API地址
+            api_url = "https://www.binance.com/bapi/futures/v1/public/future/leaderboard/getPositionHistory"
+            
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+                "Content-Type": "application/json",
+                "Origin": "https://www.binance.com",
+                "Referer": self.base_url
+            }
+            
+            # 计算过去24小时的时间戳
+            current_time = int(datetime.utcnow().timestamp() * 1000)
+            past_time = int((datetime.utcnow() - timedelta(days=1)).timestamp() * 1000)
+            
+            # 请求参数
+            payload = {
+                "encryptedUid": self.encrypted_uid,
+                "tradeType": "PERPETUAL",
+                "startTime": past_time,
+                "endTime": current_time,
+                "limit": 20  # 最近20条记录
+            }
+            
+            async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
+                response = await client.post(api_url, json=payload)
+                response.raise_for_status()
+                data = response.json()
+                
+                if data.get("success") and "data" in data:
+                    return data["data"]["positionHistoryList"]
+                else:
+                    logger.error(f"历史交易API返回错误: {data}")
+                    return []
+        except Exception as e:
+            logger.error(f"获取历史交易数据失败: {str(e)}")
             return []
     
     async def parse_trades(self, html_content: str) -> List[Dict[str, Any]]:
@@ -207,33 +248,99 @@ class AoyingCapitalScraper:
         
         return trades
     
+    async def parse_history_data(self, history_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """解析历史交易数据为交易记录格式"""
+        trades = []
+        
+        for position in history_data:
+            try:
+                symbol = position.get("symbol", "").replace("USDT", "/USDT")  # 添加斜杠使格式一致
+                direction = "LONG" if position.get("amount", 0) > 0 else "SHORT"
+                entry_price = float(position.get("entryPrice", 0))
+                exit_price = float(position.get("closePrice", 0))
+                leverage = int(position.get("leverage", 1))
+                position_size = abs(float(position.get("amount", 0)))
+                pnl = float(position.get("pnl", 0))
+                roe = float(position.get("roe", 0))
+                
+                # 从updateTime转换为datetime
+                entry_time_ms = position.get("createTime", 0)
+                if entry_time_ms > 0:
+                    entry_time = datetime.fromtimestamp(entry_time_ms / 1000)
+                else:
+                    entry_time = datetime.utcnow()
+                
+                # 从closeTime转换为datetime
+                exit_time_ms = position.get("updateTime", 0)
+                if exit_time_ms > 0:
+                    exit_time = datetime.fromtimestamp(exit_time_ms / 1000)
+                else:
+                    exit_time = None
+                
+                # 创建交易记录
+                trade = {
+                    "trader_id": self.trader_id,
+                    "symbol": symbol,
+                    "direction": direction,
+                    "entry_price": entry_price,
+                    "exit_price": exit_price,
+                    "leverage": leverage,
+                    "position_size": position_size,
+                    "status": "CLOSED",
+                    "entry_time": entry_time,
+                    "exit_time": exit_time,
+                    "pnl": pnl,
+                    "roe": roe,
+                    "notes": f"历史交易 - ROE: {roe}%",
+                    "source_data": json.dumps(position)
+                }
+                
+                trades.append(trade)
+            except Exception as e:
+                logger.error(f"解析历史交易数据失败: {str(e)}")
+                continue
+        
+        return trades
+    
     async def fetch_trades(self) -> List[Dict[str, Any]]:
         """获取交易数据"""
         # 确保交易员存在
         await self.ensure_trader_exists()
         
-        # 首先尝试从API获取数据
+        all_trades = []
+        
+        # 首先尝试从API获取当前持仓数据
         api_data = await self.fetch_api_data()
         if api_data:
-            trades = await self.parse_api_data(api_data)
-            logger.info(f"从API获取到 {len(trades)} 条交易记录")
-            return trades
+            current_trades = await self.parse_api_data(api_data)
+            logger.info(f"从API获取到 {len(current_trades)} 条当前持仓记录")
+            all_trades.extend(current_trades)
+        
+        # 获取历史交易数据
+        history_data = await self.fetch_position_history()
+        if history_data:
+            history_trades = await self.parse_history_data(history_data)
+            logger.info(f"从API获取到 {len(history_trades)} 条历史交易记录")
+            all_trades.extend(history_trades)
         
         # 如果API获取失败，尝试从页面获取
-        logger.info("API获取失败，尝试从页面获取数据")
-        html_content = await self.fetch_page(self.base_url)
-        if not html_content:
-            logger.error("页面内容为空")
-            return []
+        if not all_trades:
+            logger.info("API获取失败，尝试从页面获取数据")
+            html_content = await self.fetch_page(self.base_url)
+            if not html_content:
+                logger.error("页面内容为空")
+                return []
+            
+            # 解析交易数据
+            page_trades = await self.parse_trades(html_content)
+            
+            # 添加交易员ID
+            for trade in page_trades:
+                trade["trader_id"] = self.trader_id
+            
+            all_trades.extend(page_trades)
         
-        # 解析交易数据
-        trades = await self.parse_trades(html_content)
-        
-        # 添加交易员ID
-        for trade in trades:
-            trade["trader_id"] = self.trader_id
-        
-        return trades
+        return all_trades
     
     async def update_trades(self) -> int:
         """更新交易数据"""
@@ -251,23 +358,13 @@ class AoyingCapitalScraper:
                 
                 return 0
             
-            # 保存交易数据
+            # 保存交易数据到数据库
             saved_count = save_trades(trades)
-            logger.info(f"保存了 {saved_count} 条交易记录")
-            
+            logger.info(f"成功保存 {saved_count} 条交易记录")
             return saved_count
+        
         except Exception as e:
             logger.error(f"更新交易数据失败: {str(e)}")
-            
-            # 如果允许回退到模拟数据，且爬虫出错
-            if self.fallback_to_mock:
-                logger.info("爬虫出错，尝试使用模拟数据作为备选")
-                try:
-                    mock_generator = MockTradeGenerator(trader_name=self.trader_name)
-                    return await mock_generator.update_trades(count=5)
-                except Exception as mock_error:
-                    logger.error(f"使用模拟数据也失败: {str(mock_error)}")
-            
             return 0
 
 # 模拟数据生成器（用于测试）

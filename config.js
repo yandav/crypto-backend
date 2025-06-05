@@ -22,7 +22,7 @@ const ENV = {
 };
 
 // 当前激活的环境
-const CURRENT_ENV = ENV.PROD;
+const CURRENT_ENV = ENV.DEV;
 
 // 各环境配置
 const config = {

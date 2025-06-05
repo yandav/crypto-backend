@@ -8,13 +8,15 @@ const API = axios.create({
   timeout: config.apiTimeout,
   headers: {
     'Content-Type': 'application/json'
-  }
+  },
+  withCredentials: true  // 允许跨域请求携带凭证
 })
 
 // 请求拦截器
 API.interceptors.request.use(
   config => {
-    // 可以在这里添加认证信息等
+    // 添加CORS相关头
+    config.headers['X-Requested-With'] = 'XMLHttpRequest'
     return config
   },
   error => {
@@ -29,6 +31,12 @@ API.interceptors.response.use(
   },
   error => {
     console.error('API请求错误:', error)
+    // 如果是CORS错误，提供更详细的日志
+    if (error.message && error.message.includes('Network Error')) {
+      console.error('可能是CORS配置问题，请检查后端CORS设置')
+      console.error('前端域名:', window.location.origin)
+      console.error('后端API地址:', config.apiBaseUrl)
+    }
     return Promise.reject(error)
   }
 )

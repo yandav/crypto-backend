@@ -18,6 +18,7 @@ from database import (
 from models import Price, OpenInterest, Trader, Trade
 from middleware import rate_limit, log_request, error_handler
 from config import config
+from trade_notification import check_new_trades  # 导入交易通知模块
 import asyncio
 import os
 import time
@@ -42,8 +43,13 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 
 # 配置CORS
-cors_origin = os.getenv('CORS_ORIGIN', '*')
-CORS(app, resources={r"/api/*": {"origins": cors_origin}})
+cors_origins = os.getenv('CORS_ORIGINS', 'https://crypto-backend-4973.vercel.app')
+# 如果环境变量中有多个域名，用逗号分隔
+origins = cors_origins.split(',')
+CORS(app, resources={r"/api/*": {"origins": origins}}, 
+     supports_credentials=True,
+     allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 
 # 线程本地存储，为每个线程提供独立的事件循环
 _thread_local = threading.local()
@@ -190,6 +196,23 @@ def update_trade_data():
     except Exception as e:
         logger.error(f"❌ 交易数据更新失败: {str(e)}", exc_info=True)
 
+# ✅ 定时任务：更新热门交易员数据
+def update_popular_traders_data():
+    try:
+        logger.info("📊 正在更新热门交易员数据...")
+        start = time.time()
+        
+        # 导入热门交易员爬虫模块
+        from popular_traders_scraper import PopularTradersScraper
+        
+        # 使用热门交易员爬虫
+        scraper = PopularTradersScraper(fallback_to_mock=True)
+        saved_count = run_async_in_thread(scraper.update_trades())
+        
+        logger.info(f"✅ 热门交易员数据已更新，新增/更新 {saved_count} 条记录，用时 {time.time() - start:.2f}s")
+    except Exception as e:
+        logger.error(f"❌ 热门交易员数据更新失败: {str(e)}", exc_info=True)
+
 def calculate_price_changes(market_data):
     """计算价格变化，直接使用最新的市场数据，立即返回已有数据"""
     result = []
@@ -296,7 +319,7 @@ scheduler = BackgroundScheduler(
 scheduler.add_job(
     update_price_data,
     'interval',
-    minutes=5,  # 增加到5分钟更新一次
+    minutes=5,
     id='update_price_data'
 )
 scheduler.add_job(
@@ -314,8 +337,20 @@ scheduler.add_job(
 scheduler.add_job(
     update_trade_data,
     'interval',
-    minutes=30,  # 每30分钟更新一次交易数据
+    minutes=5,  # 每5分钟更新一次交易数据
     id='update_trade_data'
+)
+scheduler.add_job(
+    check_new_trades,
+    'interval',
+    minutes=5,  # 每5分钟检查一次新交易
+    id='check_new_trades'
+)
+scheduler.add_job(
+    update_popular_traders_data,
+    'interval',
+    minutes=10,  # 每10分钟更新一次热门交易员数据
+    id='update_popular_traders_data'
 )
 
 # 添加一个恢复机制，每小时检查并重置API状态
@@ -796,6 +831,59 @@ def update_trades_api():
         logger.error(traceback.format_exc())
         return jsonify({"message": "更新交易数据失败", "error": str(e)}), 500
 
+@app.route("/api/check_trades", methods=["POST"])
+@rate_limit
+@log_request
+@error_handler
+def check_trades_api():
+    """手动触发交易检查和通知"""
+    try:
+        # 调用交易检查函数
+        new_trades_count = check_new_trades()
+        
+        return jsonify({
+            "message": "交易检查完成",
+            "new_trades_count": new_trades_count,
+            "timestamp": datetime.now().isoformat()
+        })
+    except Exception as e:
+        logger.error(f"手动触发交易检查失败: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({"message": "交易检查失败", "error": str(e)}), 500
+
+@app.route("/api/update_popular_traders", methods=["POST"])
+@rate_limit
+@log_request
+@error_handler
+def update_popular_traders_api():
+    """手动触发热门交易员数据更新"""
+    try:
+        # 导入热门交易员爬虫模块
+        from popular_traders_scraper import PopularTradersScraper
+        
+        # 获取参数
+        use_mock = request.json.get("use_mock", False)
+        
+        # 使用热门交易员爬虫
+        scraper = PopularTradersScraper(fallback_to_mock=use_mock)
+        saved_count = run_async(scraper.update_trades())
+        
+        return jsonify({
+            "message": "热门交易员数据更新成功",
+            "saved_count": saved_count,
+            "timestamp": datetime.now().isoformat()
+        })
+    except Exception as e:
+        logger.error(f"更新热门交易员数据失败: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({"message": "更新热门交易员数据失败", "error": str(e)}), 500
+
+# 添加CORS预检请求处理器
+@app.route('/api/<path:path>', methods=['OPTIONS'])
+def handle_options(path):
+    response = app.make_default_options_response()
+    return response
+
 # ✅ 启动入口
 if __name__ == '__main__':
     try:
@@ -822,6 +910,12 @@ if __name__ == '__main__':
             logger.info("价格变化数据初始化完成")
         except Exception as e:
             logger.error(f"价格变化数据初始化失败: {str(e)}")
+            
+        try:
+            update_popular_traders_data()  # 初始化热门交易员数据
+            logger.info("热门交易员数据初始化完成")
+        except Exception as e:
+            logger.error(f"热门交易员数据初始化失败: {str(e)}")
         
         # 每天清理30天前的数据
         scheduler.add_job(
