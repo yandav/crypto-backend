@@ -111,7 +111,7 @@ const config = {
     
     database: {
       // 在生产环境中使用环境变量
-      url: process.env.DATABASE_URL || 'postgresql://yandavi_fvr5_user:aeWKcZlTTY6YNvD3cOFVqZxPJZ7VSJSO@dpg-d10pbj6mcj7s73buf9n0-a/yandavi_fvr5',
+      url: process.env.DATABASE_URL || 'postgresql://yandavi_iabv_user:ah9lOEx8dPWPAz1d8beXJJZ0o4wTX1Yy@dpg-d124fq3uibrs73er3fcg-a/yandavi_iabv',
       poolSize: 5,
       maxOverflow: 10,
       poolTimeout: 60,

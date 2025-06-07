@@ -49,10 +49,10 @@ class TradeNotifier:
                     logger.error(f"交易员不存在: {trader_name}")
                     return []
                 
-                # 查询上次检查后的新交易
+                # 查询上次检查后的新交易，使用entry_time而不是created_at
                 trades = session.query(Trade).filter(
                     Trade.trader_id == trader.id,
-                    Trade.created_at >= self.last_check_time
+                    Trade.entry_time >= self.last_check_time
                 ).order_by(Trade.entry_time.desc()).all()
                 
                 # 格式化交易数据

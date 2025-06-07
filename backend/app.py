@@ -891,6 +891,14 @@ if __name__ == '__main__':
         init_db()
         logger.info("数据库初始化完成")
         
+        # 运行数据库迁移脚本
+        try:
+            from add_timestamp_columns import add_timestamp_columns
+            add_timestamp_columns()
+            logger.info("数据库迁移完成")
+        except Exception as e:
+            logger.error(f"数据库迁移失败: {str(e)}")
+        
         # 初始化数据
         logger.info("正在初始化数据...")
         try:

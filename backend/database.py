@@ -461,6 +461,8 @@ def save_trades(trades_data: List[Dict[str, Any]], batch_size: int = 100) -> int
         
     try:
         saved_count = 0
+        current_time = datetime.utcnow()
+        
         with get_db_session() as session:
             for i in range(0, len(trades_data), batch_size):
                 batch = trades_data[i:i + batch_size]
@@ -484,6 +486,8 @@ def save_trades(trades_data: List[Dict[str, Any]], batch_size: int = 100) -> int
                                 existing.pnl = trade_data["pnl"]
                             if "pnl_percentage" in trade_data:
                                 existing.pnl_percentage = trade_data["pnl_percentage"]
+                            # 更新updated_at字段
+                            existing.updated_at = current_time
                             saved_count += 1
                     else:
                         # 如果不存在，创建新交易
@@ -500,7 +504,9 @@ def save_trades(trades_data: List[Dict[str, Any]], batch_size: int = 100) -> int
                             entry_time=trade_data["entry_time"],
                             exit_time=trade_data.get("exit_time"),
                             notes=trade_data.get("notes"),
-                            source_data=trade_data.get("source_data")
+                            source_data=trade_data.get("source_data"),
+                            created_at=current_time,
+                            updated_at=current_time
                         )
                         session.add(trade)
                         saved_count += 1

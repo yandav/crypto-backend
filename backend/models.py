@@ -95,6 +95,8 @@ class Trade(Base):
     exit_time = Column(DateTime, nullable=True)
     notes = Column(Text, nullable=True)
     source_data = Column(Text, nullable=True)  # 原始数据JSON
+    created_at = Column(DateTime, nullable=True)  # 记录创建时间
+    updated_at = Column(DateTime, nullable=True)  # 记录更新时间
     
     # 关联交易员
     trader = relationship("Trader", back_populates="trades")

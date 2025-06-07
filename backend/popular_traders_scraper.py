@@ -112,6 +112,7 @@ class PopularTradersScraper:
     async def fetch_position_history(self, encrypted_uid: str) -> List[Dict[str, Any]]:
         """获取历史交易数据"""
         try:
+            # 尝试第一个API端点
             api_url = "https://www.binance.com/bapi/futures/v1/public/future/leaderboard/getPositionHistory"
             
             headers = {
@@ -134,15 +135,55 @@ class PopularTradersScraper:
             }
             
             async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
-                response = await client.post(api_url, json=payload)
-                response.raise_for_status()
-                data = response.json()
+                try:
+                    response = await client.post(api_url, json=payload)
+                    response.raise_for_status()
+                    data = response.json()
+                    
+                    if data.get("success") and "data" in data:
+                        return data["data"]["positionHistoryList"]
+                    else:
+                        logger.error(f"历史交易API返回错误: {data}")
+                except httpx.HTTPStatusError as e:
+                    if e.response.status_code == 404:
+                        logger.warning(f"历史交易API端点不可用 (404)，尝试替代API...")
+                    else:
+                        logger.error(f"历史交易API请求失败: {str(e)}")
                 
-                if data.get("success") and "data" in data:
-                    return data["data"]["positionHistoryList"]
-                else:
-                    logger.error(f"历史交易API返回错误: {data}")
-                    return []
+                # 尝试替代API端点
+                alt_api_url = "https://www.binance.com/bapi/futures/v2/public/future/leaderboard/getPositionHistory"
+                try:
+                    response = await client.post(alt_api_url, json=payload)
+                    response.raise_for_status()
+                    data = response.json()
+                    
+                    if data.get("success") and "data" in data:
+                        return data["data"]["positionHistoryList"]
+                    else:
+                        logger.error(f"替代历史交易API返回错误: {data}")
+                except Exception as e:
+                    logger.error(f"替代历史交易API请求失败: {str(e)}")
+                
+                # 如果两个API都失败，尝试第三种方式
+                alt_api_url2 = "https://www.binance.com/bapi/futures/v1/public/future/leaderboard/getTradeStatistics"
+                try:
+                    alt_payload = {
+                        "encryptedUid": encrypted_uid,
+                        "tradeType": "PERPETUAL"
+                    }
+                    response = await client.post(alt_api_url2, json=alt_payload)
+                    response.raise_for_status()
+                    data = response.json()
+                    
+                    if data.get("success") and "data" in data:
+                        logger.info(f"成功获取交易统计数据，但无法获取详细历史交易")
+                    else:
+                        logger.error(f"交易统计API返回错误: {data}")
+                except Exception as e:
+                    logger.error(f"交易统计API请求失败: {str(e)}")
+                
+                # 所有API都失败，返回空列表
+                return []
         except Exception as e:
             logger.error(f"获取历史交易数据失败: {str(e)}")
             return []
